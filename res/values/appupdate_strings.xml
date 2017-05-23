@@ -14,5 +14,5 @@
 
      <string name="update_error_title">Erro</string>
      <string name="update_error_message">A rede atual não está disponível, verifique as configurações de rede.</string>
-     <string name="update_error_yes_btn">OK</ string>
+     <string name="update_error_yes_btn">OK</string>
 </resources>
