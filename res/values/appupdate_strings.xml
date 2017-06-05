@@ -4,7 +4,7 @@
      <string name="update_title">Nova atualização</string>
      <string name="update_message">O aplicativo precisa ser atualizado!</string>
      <string name="update_update_btn">Atualizar</string>
-     <string name="updating">Atualizando</string>
+     <string name="updating">Baixando</string>
      <string name="update_cancel">Cancelar</string>
      <string name="update_bg">Atualizar em segundo plano</string>
      <string name="download_complete">Download completo</string>
