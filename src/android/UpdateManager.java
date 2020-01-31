@@ -10,6 +10,7 @@ import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.LOG;
 import org.json.JSONArray;
+import org.json.JSONObject;
 import org.json.JSONException;
 
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ public class UpdateManager {
      *   </update>
      */
     private String updateXmlUrl;
+    private JSONObject options;
     private JSONArray args;
     private CordovaInterface cordova;
     private CallbackContext callbackContext;
@@ -51,14 +53,15 @@ public class UpdateManager {
         msgBox = new MsgBox(mContext);
     }
 
-    public UpdateManager(JSONArray args, CallbackContext callbackContext, Context context) {
-        this(args, callbackContext, context, "http://192.168.3.102:8080/update_apk/version.xml");
+    public UpdateManager(JSONArray args, CallbackContext callbackContext, Context context, JSONObject options) {
+        this(args, callbackContext, context, "http://192.168.3.102:8080/update_apk/version.xml", options);
     }
 
-    public UpdateManager(JSONArray args, CallbackContext callbackContext, Context context, String updateUrl) {
+    public UpdateManager(JSONArray args, CallbackContext callbackContext, Context context, String updateUrl, JSONObject options) {
         this.args = args;
         this.callbackContext = callbackContext;
         this.updateXmlUrl = updateUrl;
+        this.options = options;
         this.mContext = context;
         packageName = mContext.getPackageName();
         msgBox = new MsgBox(mContext);
@@ -69,6 +72,7 @@ public class UpdateManager {
         this.args = args;
         this.callbackContext = callbackContext;
         this.updateXmlUrl = args.getString(0);
+        this.options = args.getJSONObject(1);
         return this;
     }
 
@@ -123,9 +127,18 @@ public class UpdateManager {
     public void checkUpdate() {
         LOG.d(TAG, "checkUpdate..");
 
-        checkUpdateThread = new CheckUpdateThread(mContext, mHandler, queue, packageName, updateXmlUrl);
+        checkUpdateThread = new CheckUpdateThread(mContext, mHandler, queue, packageName, updateXmlUrl, options);
         this.cordova.getThreadPool().execute(checkUpdateThread);
         //new Thread(checkUpdateThread).start();
+    }
+
+    /**
+     * Permissions denied
+     */
+    public void permissionDenied(String errMsg) {
+        LOG.d(TAG, "permissionsDenied..");
+
+        callbackContext.error(Utils.makeJSON(Constants.PERMISSION_DENIED, errMsg));
     }
 
     /**
@@ -136,17 +149,31 @@ public class UpdateManager {
         int versionCodeLocal = version.getLocal();
         int versionCodeRemote = version.getRemote();
 
+        boolean skipPromptDialog = false;
+        try {
+            skipPromptDialog = options.getBoolean("skipPromptDialog");
+        } catch (JSONException e) {}
+
+        boolean skipProgressDialog = false;
+        try {
+            skipProgressDialog = options.getBoolean("skipProgressDialog");
+        } catch (JSONException e) {}
+
         //比对版本号
         //检查软件是否有更新版本
-        if (versionCodeLocal != versionCodeRemote) {
+        if (versionCodeLocal < versionCodeRemote) {
             if (isDownloading) {
-                msgBox.showDownloadDialog(null, null, null);
+                msgBox.showDownloadDialog(null, null, null, !skipProgressDialog);
                 mHandler.sendEmptyMessage(Constants.VERSION_UPDATING);
             } else {
                 LOG.d(TAG, "need update");
-                // 显示提示对话框
-                msgBox.showNoticeDialog(noticeDialogOnClick);
-                mHandler.sendEmptyMessage(Constants.VERSION_NEED_UPDATE);
+                if (skipPromptDialog) {
+                    mHandler.sendEmptyMessage(Constants.DOWNLOAD_CLICK_START);
+                } else {
+                    // 显示提示对话框
+                    msgBox.showNoticeDialog(noticeDialogOnClick);
+                    mHandler.sendEmptyMessage(Constants.VERSION_NEED_UPDATE);
+                }
             }
         } else {
             mHandler.sendEmptyMessage(Constants.VERSION_UP_TO_UPDATE);
@@ -165,11 +192,19 @@ public class UpdateManager {
 
     private void emitNoticeDialogOnClick() {
         isDownloading = true;
+
+        boolean skipProgressDialog = false;
+        try {
+            skipProgressDialog = options.getBoolean("skipProgressDialog");
+        } catch (JSONException e) {}
+
         // 显示下载对话框
         Map<String, Object> ret = msgBox.showDownloadDialog(
                 downloadDialogOnClickNeg,
                 downloadDialogOnClickPos,
-                downloadDialogOnClickNeu);
+                downloadDialogOnClickNeu,
+                !skipProgressDialog);
+
         // 下载文件
         downloadApk((AlertDialog) ret.get("dialog"), (ProgressBar) ret.get("progress"));
     }
@@ -225,7 +260,7 @@ public class UpdateManager {
         LOG.d(TAG, "downloadApk" + mProgress);
 
         // 启动新线程下载软件
-        downloadApkThread = new DownloadApkThread(mContext, mHandler, mProgress, mDownloadDialog, checkUpdateThread.getMHashMap());
+        downloadApkThread = new DownloadApkThread(mContext, mHandler, mProgress, mDownloadDialog, checkUpdateThread.getMHashMap(), options);
         this.cordova.getThreadPool().execute(downloadApkThread);
         // new Thread(downloadApkThread).start();
     }
